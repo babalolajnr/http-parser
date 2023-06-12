@@ -236,7 +236,13 @@ fn uri(input: &str) -> Res<&str, URI> {
 }
 
 fn main() {
-    println!("Hello, world!");
+    let uri_string = "https://www.zupzup.org/about/?someVal=5#anchor";
+
+    println!("Parsing URI: {}", uri_string);
+
+    uri(uri_string)
+        .map(|(_, uri)| println!("{:#?}", uri))
+        .unwrap();
 }
 
 #[cfg(test)]
