@@ -195,6 +195,19 @@ fn fragment(input: &str) -> Res<&str, &str> {
         .map(|(next_input, res)| (next_input, res.1))
 }
 
+fn port(input: &str) -> Res<&str, u16> {
+    context("port", tuple((tag(":"), n_to_m_digits(1, 5))))(input).and_then(
+        |(next_input, result)| match result.1.parse::<u16>() {
+            Ok(n) => Ok((next_input, n)),
+            Err(_) => Err(NomErr::Error(VerboseError { errors: vec![] })),
+        },
+    )
+}
+
+// fn uri(input: &str) -> Res<&str, URI> {
+//     context("uri", tuple((scheme, opt(authority), ip_or_host, opt(port))))
+// }
+
 fn main() {
     println!("Hello, world!");
 }
@@ -209,6 +222,21 @@ mod tests {
     fn test_fragment() {
         assert_eq!(fragment("#bla"), Ok(("", "bla")));
         assert_eq!(fragment("#bla-blub"), Ok(("", "bla-blub")));
+    }
+
+    #[test]
+    fn test_port() {
+        assert_eq!(port(":8080"), Ok(("", 8080)));
+        assert_eq!(port(":80"), Ok(("", 80)));
+        assert_eq!(port(":8"), Ok(("", 8)));
+        assert_eq!(
+            port(":80800"),
+            Err(NomErr::Error(VerboseError { errors: vec![] }))
+        );
+        // assert_eq!(
+        //     port(":8080a"),
+        //     Err(NomErr::Error(VerboseError { errors: vec![] }))
+        // );
     }
 
     #[test]
