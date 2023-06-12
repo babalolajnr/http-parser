@@ -4,7 +4,7 @@ use nom::{
     character::complete::{alpha1, alphanumeric1, one_of},
     combinator::opt,
     error::{context, ErrorKind, VerboseError},
-    multi::{count, many1, many_m_n},
+    multi::{count, many0, many1, many_m_n},
     sequence::{separated_pair, terminated, tuple},
     AsChar, Err as NomErr, IResult, InputTakeAtPosition,
 };
@@ -129,6 +129,42 @@ fn ip(input: &str) -> Res<&str, Host> {
     })
 }
 
+fn ip_or_host(input: &str) -> Res<&str, Host> {
+    context("ip or host", alt((ip, host)))(input)
+}
+
+fn url_code_points<T>(i: T) -> Res<T, T>
+where
+    T: InputTakeAtPosition,
+    <T as InputTakeAtPosition>::Item: AsChar,
+{
+    i.split_at_position_complete(|item| {
+        let char_item = item.as_char();
+        char_item != '-' && !char_item.is_alphanum() && char_item != '.'
+    })
+}
+
+fn path(input: &str) -> Res<&str, Vec<&str>> {
+    context(
+        "path",
+        tuple((
+            tag("/"),
+            many0(terminated(url_code_points, tag("/"))),
+            opt(url_code_points),
+        )),
+    )(input)
+    .map(|(next_input, res)| {
+        let mut path: Vec<&str> = res.1.iter().map(|p| p.to_owned()).collect();
+        if let Some(last) = res.2 {
+            if !last.is_empty() {
+                path.push(last);
+            }
+        }
+
+        (next_input, path)
+    })
+}
+
 fn main() {
     println!("Hello, world!");
 }
@@ -138,6 +174,18 @@ mod tests {
     use nom::error::{ErrorKind, VerboseErrorKind};
 
     use super::*;
+
+    #[test]
+    fn test_path() {
+        assert_eq!(path("/a/b/c?d"), Ok(("?d", vec!["a", "b", "c"])));
+        assert_eq!(path("/a/b/c/?d"), Ok(("?d", vec!["a", "b", "c"])));
+        assert_eq!(path("/a/b-c-d/c/?d"), Ok(("?d", vec!["a", "b-c-d", "c"])));
+        assert_eq!(path("/a/1234/c/?d"), Ok(("?d", vec!["a", "1234", "c"])));
+        assert_eq!(
+            path("/a/1234/c.txt?d"),
+            Ok(("?d", vec!["a", "1234", "c.txt"]))
+        );
+    }
 
     #[test]
     fn test_scheme() {
