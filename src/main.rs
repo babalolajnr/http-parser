@@ -9,6 +9,7 @@ use nom::{
     AsChar, Err as NomErr, IResult, InputTakeAtPosition,
 };
 
+#[derive(Debug, PartialEq, Eq)]
 struct URI<'a> {
     scheme: Scheme,
     authority: Option<Authority<'a>>,
@@ -204,9 +205,35 @@ fn port(input: &str) -> Res<&str, u16> {
     )
 }
 
-// fn uri(input: &str) -> Res<&str, URI> {
-//     context("uri", tuple((scheme, opt(authority), ip_or_host, opt(port))))
-// }
+fn uri(input: &str) -> Res<&str, URI> {
+    context(
+        "uri",
+        tuple((
+            scheme,
+            opt(authority),
+            ip_or_host,
+            opt(port),
+            opt(path),
+            opt(query_params),
+            opt(fragment),
+        )),
+    )(input)
+    .map(|(next_input, result)| {
+        let (scheme, authority, host, port, path, query, fragment) = result;
+        (
+            next_input,
+            URI {
+                scheme,
+                authority,
+                host,
+                port,
+                path,
+                query,
+                fragment,
+            },
+        )
+    })
+}
 
 fn main() {
     println!("Hello, world!");
@@ -433,6 +460,73 @@ mod tests {
                     ("999.168.0.0:8080", VerboseErrorKind::Context("ip")),
                 ]
             }))
+        );
+    }
+
+    #[test]
+    fn test_uri() {
+        assert_eq!(
+            uri("https://www.zupzup.org/about/"),
+            Ok((
+                "",
+                URI {
+                    scheme: Scheme::HTTPS,
+                    authority: None,
+                    host: Host::HOST("www.zupzup.org".to_string()),
+                    port: None,
+                    path: Some(vec!["about"]),
+                    query: None,
+                    fragment: None
+                }
+            ))
+        );
+
+        assert_eq!(
+            uri("http://localhost"),
+            Ok((
+                "",
+                URI {
+                    scheme: Scheme::HTTP,
+                    authority: None,
+                    host: Host::HOST("localhost".to_string()),
+                    port: None,
+                    path: None,
+                    query: None,
+                    fragment: None
+                }
+            ))
+        );
+
+        assert_eq!(
+            uri("https://www.zupzup.org:443/about/?someVal=5#anchor"),
+            Ok((
+                "",
+                URI {
+                    scheme: Scheme::HTTPS,
+                    authority: None,
+                    host: Host::HOST("www.zupzup.org".to_string()),
+                    port: Some(443),
+                    path: Some(vec!["about"]),
+                    query: Some(vec![("someVal", "5")]),
+                    fragment: Some("anchor")
+                }
+            ))
+        );
+
+        assert_eq!(
+            uri("http://user:pw@127.0.0.1:8080"),
+            Ok((
+                "",
+                URI {
+                    scheme: Scheme::HTTP,
+                    authority: Some(("user", Some("pw"))),
+                    host: Host::IP([127, 0, 0, 1]),
+                    port: Some(8080),
+                    path: None,
+                    query: None,
+                    fragment: None
+                }
+            ))
         );
     }
 }
