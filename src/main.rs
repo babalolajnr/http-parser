@@ -33,7 +33,7 @@ enum Host {
     IP([u8; 4]),
 }
 
-type QueryParam<'a> = (&'a str, Option<&'a str>);
+type QueryParam<'a> = (&'a str, &'a str);
 
 type QueryParams<'a> = Vec<QueryParam<'a>>;
 
@@ -165,6 +165,30 @@ fn path(input: &str) -> Res<&str, Vec<&str>> {
     })
 }
 
+fn query_params(input: &str) -> Res<&str, QueryParams> {
+    context(
+        "query params",
+        tuple((
+            tag("?"),
+            url_code_points,
+            tag("="),
+            url_code_points,
+            many0(tuple((
+                tag("&"),
+                url_code_points,
+                tag("="),
+                url_code_points,
+            ))),
+        )),
+    )(input)
+    .map(|(next_input, res)| {
+        let mut query_params = vec![(res.1, res.3)];
+        for qp in res.4 {
+            query_params.push((qp.1, qp.3));
+        }
+        (next_input, query_params)
+    })
+}
 fn main() {
     println!("Hello, world!");
 }
@@ -174,6 +198,19 @@ mod tests {
     use nom::error::{ErrorKind, VerboseErrorKind};
 
     use super::*;
+
+    #[test]
+    fn test_query_params() {
+        assert_eq!(
+            query_params("?bla=5&blub=val#yay"),
+            Ok(("#yay", vec![("bla", "5"), ("blub", "val")]))
+        );
+
+        assert_eq!(
+            query_params("?bla-blub=arr-arr#yay"),
+            Ok(("#yay", vec![("bla-blub", "arr-arr"),]))
+        );
+    }
 
     #[test]
     fn test_path() {
