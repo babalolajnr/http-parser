@@ -1,7 +1,10 @@
 use nom::{
     branch::alt,
-    bytes::complete::tag_no_case,
+    bytes::complete::{tag, tag_no_case},
+    character::complete::alphanumeric1,
+    combinator::opt,
     error::{context, VerboseError},
+    sequence::{separated_pair, terminated},
     Err as NomErr, IResult,
 };
 
@@ -53,6 +56,16 @@ fn scheme(input: &str) -> Res<&str, Scheme> {
     .map(|(next_input, scheme)| (next_input, scheme.into()))
 }
 
+fn authority(input: &str) -> Res<&str, (&str, Option<&str>)> {
+    context(
+        "authority",
+        terminated(
+            separated_pair(alphanumeric1, opt(tag(":")), opt(alphanumeric1)),
+            tag("@"),
+        ),
+    )(input)
+}
+
 fn main() {
     println!("Hello, world!");
 }
@@ -79,5 +92,62 @@ mod tests {
                 ]
             }))
         );
+    }
+
+    #[test]
+    fn test_authority() {
+        assert_eq!(
+            authority("username:password@zupzup.org"),
+            Ok(("zupzup.org", ("username", Some("password"))))
+        );
+        assert_eq!(
+            authority("username@zupzup.org"),
+            Ok(("zupzup.org", ("username", None)))
+        );
+        assert_eq!(
+            authority("zupzup.org"),
+            Err(NomErr::Error(VerboseError {
+                errors: vec![
+                    (".org", VerboseErrorKind::Nom(ErrorKind::Tag)),
+                    ("zupzup.org", VerboseErrorKind::Context("authority")),
+                ]
+            }))
+        );
+        assert_eq!(
+            authority(":zupzup.org"),
+            Err(NomErr::Error(VerboseError {
+                errors: vec![
+                    (
+                        ":zupzup.org",
+                        VerboseErrorKind::Nom(ErrorKind::AlphaNumeric)
+                    ),
+                    (":zupzup.org", VerboseErrorKind::Context("authority")),
+                ]
+            }))
+        );
+        assert_eq!(
+            authority("username:passwordzupzup.org"),
+            Err(NomErr::Error(VerboseError {
+                errors: vec![
+                    (".org", VerboseErrorKind::Nom(ErrorKind::Tag)),
+                    (
+                        "username:passwordzupzup.org",
+                        VerboseErrorKind::Context("authority")
+                    ),
+                ]
+            }))
+        );
+        assert_eq!(
+            authority("@zupzup.org"),
+            Err(NomErr::Error(VerboseError {
+                errors: vec![
+                    (
+                        "@zupzup.org",
+                        VerboseErrorKind::Nom(ErrorKind::AlphaNumeric)
+                    ),
+                    ("@zupzup.org", VerboseErrorKind::Context("authority")),
+                ]
+            }))
+        )
     }
 }
