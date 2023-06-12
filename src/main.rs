@@ -1,11 +1,12 @@
 use nom::{
     branch::alt,
-    bytes::complete::{tag, tag_no_case},
-    character::complete::alphanumeric1,
+    bytes::complete::{tag, tag_no_case, take},
+    character::complete::{alpha1, alphanumeric1},
     combinator::opt,
-    error::{context, VerboseError},
-    sequence::{separated_pair, terminated},
-    Err as NomErr, IResult,
+    error::{context, ErrorKind, VerboseError},
+    multi::{many1, many_m_n},
+    sequence::{separated_pair, terminated, tuple},
+    AsChar, Err as NomErr, IResult, InputTakeAtPosition,
 };
 
 struct URI<'a> {
@@ -64,6 +65,36 @@ fn authority(input: &str) -> Res<&str, (&str, Option<&str>)> {
             tag("@"),
         ),
     )(input)
+}
+
+fn host(input: &str) -> Res<&str, Host> {
+    context(
+        "host",
+        alt((
+            tuple((many1(terminated(alphanumerichyphen1, tag("."))), alpha1)),
+            tuple((many_m_n(1, 1, alphanumerichyphen1), take(0_usize))),
+        )),
+    )(input)
+    .map(|(next_input, mut res)| {
+        if !res.1.is_empty() {
+            res.0.push(res.1);
+        }
+        (next_input, Host::HOST(res.0.join(".")))
+    })
+}
+
+fn alphanumerichyphen1<T>(i: T) -> Res<T, T>
+where
+    T: InputTakeAtPosition,
+    <T as InputTakeAtPosition>::Item: AsChar,
+{
+    i.split_at_position1_complete(
+        |item| {
+            let char_item = item.as_char();
+            char_item != '-' && !char_item.is_alphanum()
+        },
+        ErrorKind::AlphaNumeric,
+    )
 }
 
 fn main() {
@@ -149,5 +180,47 @@ mod tests {
                 ]
             }))
         )
+    }
+
+    #[test]
+    fn test_host() {
+        assert_eq!(
+            host("localhost:8080"),
+            Ok((":8080", Host::HOST("localhost".to_string())))
+        );
+        assert_eq!(
+            host("example.org:8080"),
+            Ok((":8080", Host::HOST("example.org".to_string())))
+        );
+        assert_eq!(
+            host("some-subsite.example.org:8080"),
+            Ok((":8080", Host::HOST("some-subsite.example.org".to_string())))
+        );
+        assert_eq!(
+            host("example.123"),
+            Ok((".123", Host::HOST("example".to_string())))
+        );
+        assert_eq!(
+            host("$$$.com"),
+            Err(NomErr::Error(VerboseError {
+                errors: vec![
+                    ("$$$.com", VerboseErrorKind::Nom(ErrorKind::AlphaNumeric)),
+                    ("$$$.com", VerboseErrorKind::Nom(ErrorKind::ManyMN)),
+                    ("$$$.com", VerboseErrorKind::Nom(ErrorKind::Alt)),
+                    ("$$$.com", VerboseErrorKind::Context("host")),
+                ]
+            }))
+        );
+        assert_eq!(
+            host(".com"),
+            Err(NomErr::Error(VerboseError {
+                errors: vec![
+                    (".com", VerboseErrorKind::Nom(ErrorKind::AlphaNumeric)),
+                    (".com", VerboseErrorKind::Nom(ErrorKind::ManyMN)),
+                    (".com", VerboseErrorKind::Nom(ErrorKind::Alt)),
+                    (".com", VerboseErrorKind::Context("host")),
+                ]
+            }))
+        );
     }
 }
