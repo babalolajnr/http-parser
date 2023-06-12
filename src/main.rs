@@ -189,6 +189,12 @@ fn query_params(input: &str) -> Res<&str, QueryParams> {
         (next_input, query_params)
     })
 }
+
+fn fragment(input: &str) -> Res<&str, &str> {
+    context("fragment", tuple((tag("#"), url_code_points)))(input)
+        .map(|(next_input, res)| (next_input, res.1))
+}
+
 fn main() {
     println!("Hello, world!");
 }
@@ -198,6 +204,12 @@ mod tests {
     use nom::error::{ErrorKind, VerboseErrorKind};
 
     use super::*;
+
+    #[test]
+    fn test_fragment() {
+        assert_eq!(fragment("#bla"), Ok(("", "bla")));
+        assert_eq!(fragment("#bla-blub"), Ok(("", "bla-blub")));
+    }
 
     #[test]
     fn test_query_params() {
